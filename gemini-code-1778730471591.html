@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>拔蘿蔔抽獎大賽 🥕</title>
+    <style>
+        :root {
+            --soil-color: #8B4513;
+            --leaf-color: #2E8B57;
+            --radish-color: #FF6347;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f9ff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        h1 { color: #2c3e50; margin-bottom: 10px; }
+
+        /* 遊戲區域 */
+        .garden {
+            width: 100%;
+            max-width: 600px;
+            background-color: var(--soil-color);
+            border-radius: 20px;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            border: 8px solid #5d2e0a;
+        }
+
+        .hole {
+            aspect-ratio: 1;
+            background: #4a2508;
+            border-radius: 50%;
+            position: relative;
+            cursor: pointer;
+            overflow: visible;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .radish {
+            font-size: 40px;
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            user-select: none;
+        }
+
+        .hole:hover .radish {
+            transform: translateY(-5px) scale(1.1);
+        }
+
+        /* 拔出的動畫 */
+        .pulled {
+            animation: pullUp 0.8s forwards;
+            pointer-events: none;
+        }
+
+        @keyframes pullUp {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-50px) rotate(15deg); opacity: 1; }
+            100% { transform: translateY(-100px); opacity: 0; }
+        }
+
+        /* 設定區域 */
+        .settings {
+            margin-top: 30px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 600px;
+        }
+
+        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        input { width: 90%; padding: 5px; border: 1px solid #ccc; }
+
+        .btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover { background: #45a049; }
+        .btn-reset { background: #f44336; margin-left: 10px; }
+
+        /* 結果顯示 */
+        #result-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            text-align: center;
+            display: none;
+            z-index: 100;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🥕 歡樂拔蘿蔔抽獎 🥕</h1>
+    <p>點擊土堆裡的蘿蔔試試手氣吧！</p>
+
+    <div class="garden" id="garden">
+        </div>
+
+    <div id="result-modal">
+        <h2 id="prize-name" style="color: #e67e22;">恭喜獲得！</h2>
+        <p id="prize-desc"></p>
+        <button class="btn" onclick="closeModal()">再拔一次</button>
+    </div>
+    <div class="overlay" id="overlay"></div>
+
+    <div class="settings">
+        <h3>⚙️ 獎項設定 (機率總和需為 100%)</h3>
+        <table id="prize-table">
+            <thead>
+                <tr>
+                    <th>獎項名稱</th>
+                    <th>機率 (%)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><input type="text" value="特等獎：PS5" class="p-name"></td>
+                    <td><input type="number" value="1" class="p-chance"></td>
+                </tr>
+                <tr>
+                    <td><input type="text" value="頭獎：AirPods" class="p-name"></td>
+                    <td><input type="number" value="5" class="p-chance"></td>
+                </tr>
+                <tr>
+                    <td><input type="text" value="二獎：超商禮券" class="p-name"></td>
+                    <td><input type="number" value="20" class="p-chance"></td>
+                </tr>
+                <tr>
+                    <td><input type="text" value="安慰獎：再來一根蘿蔔" class="p-name"></td>
+                    <td><input type="number" value="74" class="p-chance"></td>
+                </tr>
+            </tbody>
+        </table>
+        <button class="btn" onclick="initGarden()">更新並重置遊戲</button>
+        <button class="btn btn-reset" onclick="resetSettings()">還原預設</button>
+    </div>
+
+    <script>
+        let prizes = [];
+
+        // 初始化菜園
+        function initGarden() {
+            const garden = document.getElementById('garden');
+            garden.innerHTML = '';
+            updatePrizes();
+
+            // 生成 12 個坑洞
+            for (let i = 0; i < 12; i++) {
+                const hole = document.createElement('div');
+                hole.className = 'hole';
+                hole.innerHTML = '<span class="radish">🥕</span>';
+                hole.onclick = () => pullRadish(hole);
+                garden.appendChild(hole);
+            }
+        }
+
+        // 讀取設定好的獎項與機率
+        function updatePrizes() {
+            prizes = [];
+            const names = document.querySelectorAll('.p-name');
+            const chances = document.querySelectorAll('.p-chance');
+            
+            names.forEach((name, i) => {
+                prizes.push({
+                    name: name.value,
+                    chance: parseFloat(chances[i].value)
+                });
+            });
+        }
+
+        // 核心抽獎邏輯
+        function drawPrize() {
+            const rand = Math.random() * 100;
+            let cumulativeChance = 0;
+
+            for (let prize of prizes) {
+                cumulativeChance += prize.chance;
+                if (rand < cumulativeChance) {
+                    return prize.name;
+                }
+            }
+            return prizes[prizes.length - 1].name; // 保險機制
+        }
+
+        // 拔蘿蔔動作
+        function pullRadish(holeElement) {
+            const radish = holeElement.querySelector('.radish');
+            if (radish.classList.contains('pulled')) return;
+
+            // 動畫
+            radish.classList.add('pulled');
+
+            // 抽獎
+            const result = drawPrize();
+
+            // 延遲顯示結果，讓動畫跑完
+            setTimeout(() => {
+                showResult(result);
+            }, 600);
+        }
+
+        function showResult(name) {
+            document.getElementById('prize-desc').innerText = name;
+            document.getElementById('result-modal').style.display = 'block';
+            document.getElementById('overlay').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('result-modal').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+        }
+
+        function resetSettings() {
+            location.reload();
+        }
+
+        // 啟動遊戲
+        initGarden();
+    </script>
+</body>
+</html>
